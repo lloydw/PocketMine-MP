@@ -21,18 +21,25 @@
 
 class ConsoleAPI{
 	private $loop, $server, $event, $help, $cmds, $alias;
+	public static $instance = null;
 	function __construct(){
 		$this->help = array();
 		$this->cmds = array();
 		$this->alias = array();
 		$this->server = ServerAPI::request();
 		$this->last = microtime(true);
+		$this->hasReadline = extension_loaded("readline");
+		$this->loop = null;
+		ConsoleAPI::$instance = $this;
 	}
 
 	public function init(){
 		$this->server->schedule(2, array($this, "handle"), array(), true);
-		if(!defined("NO_THREADS")){
-			$this->loop = new ConsoleLoop();
+		if ($this->hasReadline){
+			readline_callback_handler_install("", 'rl_callback');
+		}
+		elseif (!defined("NO_THREADS")){
+			$this->loop = new ConsoleLoop($this);
 		}
 		$this->register("help", "[page|command name]", array($this, "defaultCommands"));
 		$this->register("status", "", array($this, "defaultCommands"));
@@ -44,7 +51,7 @@ class ConsoleAPI{
 
 	function __destruct(){
 		$this->server->deleteEvent($this->event);
-		if(!defined("NO_THREADS")){
+		if($this->loop != null){
 			$this->loop->stop();
 			$this->loop->notify();
 			//$this->loop->join();
@@ -89,7 +96,11 @@ class ConsoleAPI{
 						$this->server->api->setProperty("last-update", time());
 						break;
 					case "stop":
-						$this->loop->stop = true;
+						if ($this->loop != null)
+						{
+							$this->loop->stop = true;
+							$this->loop->notify();
+						}
 						$output .= "Stopping the server\n";
 						$this->server->close();
 						break;
@@ -252,24 +263,43 @@ class ConsoleAPI{
 	}
 
 	public function handle($time){
-		if(defined("NO_THREADS")){
-			return;
-		}
-		if($this->loop->line !== false){
-			$line = trim($this->loop->line);
-			$this->loop->line = false;
-			$output = $this->run($line, "console");
-			if($output != ""){
-				$mes = explode("\n", trim($output));
-				foreach($mes as $m){
-					console("[CMD] ".$m);	
-				}
-			}
-		}else{
+
+		if ($this->hasReadline)
+		{
+			$r = array(STDIN);
+			$w = NULL;
+	    	$e = NULL;
+	    	$n = stream_select($r, $w, $e, 0);
+	    	if ($n && in_array(STDIN, $r)) {
+	        	// read a character, will call the callback when a newline is entered
+	        	readline_callback_read_char();
+	    	}
+	    }
+	    else if ($this->loop != null)
+	    {
+	    	if ($this->loop->line !== false)
+	    		$this->execute($this->loop->line);
+	    	$this->loop->line = false;
 			$this->loop->notify();
-		}
+	    }
 	}
 
+	public function execute($line)
+	{
+		$line = trim($line);
+		$output = $this->run($line, "console");
+		if($output != ""){
+			$mes = explode("\n", trim($output));
+			foreach($mes as $m){
+				console("[CMD] ".$m);	
+			}
+		}
+	}
+}
+
+function rl_callback($ret)
+{
+	ConsoleAPI::$instance->execute($ret);
 }
 
 class ConsoleLoop extends Thread{
@@ -277,9 +307,9 @@ class ConsoleLoop extends Thread{
 	public $stop;
 	public $base;
 	public $ev;
-   public $fp;
-	public function __construct(){
-		$this->line = false;
+   	public $fp;
+	public function __construct($console){
+		$this->console = $console;
 		$this->stop = false;
 		$this->start();
 	}
@@ -288,32 +318,16 @@ class ConsoleLoop extends Thread{
 		$this->stop = true;
 	}
 
-	private function readLine(){
-		if($this->fp){
-			$line = trim(fgets($this->fp));
-		}else{
-			$line = trim(readline(""));
-			if($line != ""){
-				readline_add_history( $line );
-			}
-		}
-		return $line;
-	}
-
 	public function run(){
-		if(!extension_loaded("readline")){
-			$this->fp = fopen( "php://stdin", "r" );
-		}
+		$fp = fopen( "php://stdin", "r" );
+		
 
 		while($this->stop === false){
-			$this->line = $this->readLine();
+			$this->line = trim(fgets($fp));
 			$this->wait();
-			$this->line = false;
 		}
 
-		if(!$this->haveReadline){
-			@fclose($fp);
-		}
+		@fclose($fp);
 		exit(0);
 	}
 }
