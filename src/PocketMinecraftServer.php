@@ -410,7 +410,9 @@ class PocketMinecraftServer{
 		ob_end_clean();
 		$dump .= "\r\n```";
 		$name = "Error_Dump_".date("D_M_j-H.i.s-T_Y");
-		logg($dump, $name, true, 0, true);
+		$fp = @fopen(DATA_PATH.DIRECTORY_SEPARATOR.$name.'.log', 'ab');
+		@fwrite($fp, $dump);
+		@fclose($fp);
 		console("[ERROR] Please submit the \"{$name}.log\" file to the Bug Reporting page. Give as much info as you can.", true, true, 0);
 	}
 
