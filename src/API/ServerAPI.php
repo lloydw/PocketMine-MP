@@ -292,7 +292,6 @@ class ServerAPI{
 		}
 		CraftingRecipes::init();
 		$this->server->init();
-		unregister_tick_function(array($this->server, "tick"));
 		$this->console->__destruct();
 		if($this->rcon instanceof RCON){
 			$this->rcon->stop();

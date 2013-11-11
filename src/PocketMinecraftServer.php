@@ -349,53 +349,12 @@ class PocketMinecraftServer{
 
 
 
-	public function init(){		
-		register_tick_function(array($this, "tick"));
-		console("[DEBUG] Starting internal ticker calculation", true, true, 2);
-		$t = 0;
-		while(true){
-			switch($t){
-				case 0:
-					declare(ticks=100);
-					break;
-				case 1:
-					declare(ticks=60);
-					break;
-				case 2:
-					declare(ticks=40);
-					break;
-				case 3:
-					declare(ticks=30);
-					break;
-				case 4:
-					declare(ticks=20);
-					break;
-				case 5:
-					declare(ticks=15);
-					break;
-				default:
-					declare(ticks=10);
-					break;
-			}
-			if($t > 5){
-				break;
-			}
-			$this->ticks = 0;
-			while($this->ticks < 20){
-				usleep(1);
-			}
-			
-			if($this->getTPS() < 19.5){
-				++$t;
-			}else{
-				break;
-			}
-		}
-
+	public function init(){
 		$this->loadEvents();
 		register_shutdown_function(array($this, "dumpError"));
 		register_shutdown_function(array($this, "close"));
 		if(function_exists("pcntl_signal")){
+			declare(ticks=1000); // We need ticks to process system calls
 			pcntl_signal(SIGTERM, array($this, "close"));
 			pcntl_signal(SIGINT, array($this, "close"));
 			pcntl_signal(SIGHUP, array($this, "close"));
@@ -403,7 +362,7 @@ class PocketMinecraftServer{
 		console("[INFO] Default game type: ".strtoupper($this->getGamemode()));
 		$this->trigger("server.start", microtime(true));
 		console('[INFO] Done ('.round(microtime(true) - START_TIME, 3).'s)! For help, type "help" or "?"');
-		$this->process();
+		$this->mainLoop();
 	}
 
 	public function dumpError(){
@@ -455,14 +414,11 @@ class PocketMinecraftServer{
 		console("[ERROR] Please submit the \"{$name}.log\" file to the Bug Reporting page. Give as much info as you can.", true, true, 0);
 	}
 
-	public function tick(){
-		$time = microtime(true);
-		if($this->lastTick <= ($time - 0.05)){
-			$this->tickMeasure[] = $this->lastTick = $time;
-			unset($this->tickMeasure[key($this->tickMeasure)]);
-			++$this->ticks;
-			$this->tickerFunction($time);
-		}
+	public function tick($time){
+		$this->tickMeasure[] = $this->lastTick = $time;
+		unset($this->tickMeasure[key($this->tickMeasure)]);
+		++$this->ticks;
+		$this->tickerFunction($time);
 	}
 
 	public static function clientID($ip, $port){
@@ -553,25 +509,26 @@ class PocketMinecraftServer{
 		return $this->interface->writePacket($pid, $data, $raw, $dest, $port);
 	}
 
-	public function process(){
-		$lastLoop = 0;
+	public function mainLoop(){
 		while($this->stop === false){
-			$packet = $this->interface->readPacket();
-			if($packet !== false){
-				$this->packetHandler($packet);
-				$lastLoop = 0;
-			}else{
-				++$lastLoop;
-				if($lastLoop < 16){
-					usleep(1);
-				}elseif($lastLoop < 128){
-					usleep(100);
-				}elseif($lastLoop < 256){
-					usleep(512);
-				}else{
-					usleep(10000);
+
+			$time = 0;
+			
+			while (true)
+			{
+				$time = microtime(true);
+				$timeTillNextTick = TICK_SPEED - ($time - $this->lastTick);
+
+				if ($timeTillNextTick <= 0)
+					break;
+
+				$packet = $this->interface->readPacket($timeTillNextTick);
+				if($packet !== false){
+					$this->packetHandler($packet);
 				}
 			}
+			
+			$this->tick($time);
 		}
 	}
 

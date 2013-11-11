@@ -64,6 +64,28 @@ class UDPSocket{
 		return @socket_recvfrom($this->sock, $buf, 65535, 0, $source, $port);
 	}
 
+	public function isReadReady($timeout){
+
+		if (!$this->connected)
+			return false;
+
+		$timeout = max($timeout, 0);
+		$sec = (int)$timeout;
+		$usec = (int)(($timeout - $sec) * 1000000.0);
+
+		$r = array($this->sock);
+		$w = NULL;
+		$e = NULL;
+
+		$t = microtime(true);
+		$num_changed_sockets = socket_select($r, $w, $e, $sec, $usec);
+
+		if ($num_changed_sockets === false)
+			return false;
+
+		return $num_changed_sockets > 0;
+	}
+
 	public function write($data, $dest = false, $port = false){
 		if($this->connected === false){
 			return false;

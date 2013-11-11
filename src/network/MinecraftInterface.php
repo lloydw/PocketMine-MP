@@ -53,21 +53,27 @@ class MinecraftInterface{
 		return false;
 	}
 
-	public function readPacket(){
-		$pk = $this->popPacket();
-		if($this->socket->connected === false){
-			return $pk;
+	public function readPacket($timeout){
+
+		// Instant timeout if we have packets queued
+		if (count($this->data) > 0)
+			$timeout = 0;
+
+		// Load as many packets as possible
+		if ($this->socket->isReadReady($timeout))
+		{
+			$buf = "";
+			$source = false;
+			$port = 1;
+			$len = $this->socket->read($buf, $source, $port);
+			if($len !== false){
+				$this->bandwidth[0] += $len;
+				$this->parsePacket($buf, $source, $port);	
+			}
 		}
-		$buf = "";
-		$source = false;
-		$port = 1;
-		$len = $this->socket->read($buf, $source, $port);
-		if($len === false){
-			return $pk;
-		}
-		$this->bandwidth[0] += $len;
-		$this->parsePacket($buf, $source, $port);
-		return ($pk !== false ? $pk : $this->popPacket());
+
+		// return the next packet
+		return $this->popPacket();
 	}
 	
 	private function parsePacket($buf, $source, $port){
