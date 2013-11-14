@@ -269,8 +269,7 @@ class ConsoleAPI{
 			$r = array(STDIN);
 			$w = NULL;
 	    	$e = NULL;
-	    	$n = stream_select($r, $w, $e, 0);
-	    	if ($n && in_array(STDIN, $r)) {
+	    	while (stream_select($r, $w, $e, 0) > 0) {
 	        	// read a character, will call the callback when a newline is entered
 	        	readline_callback_read_char();
 	    	}
