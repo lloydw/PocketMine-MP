@@ -57,7 +57,8 @@ if(defined("POCKETMINE_COMPILE") and POCKETMINE_COMPILE === true){
 set_include_path(get_include_path() . PATH_SEPARATOR . FILE_PATH);
 
 ini_set("memory_limit", "128M"); //Default
-define("LOG", true);
+define("LOG", false);
+define("NO_THREADS", true);
 define("START_TIME", microtime(true));
 define("MAJOR_VERSION", "Alpha_1.3.9");
 define("CURRENT_MINECRAFT_VERSION", "0.7.5 alpha");
