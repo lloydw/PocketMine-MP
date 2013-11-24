@@ -1,13 +1,13 @@
 #!/bin/bash
-COMPILER_VERSION="0.13"
+COMPILER_VERSION="0.14"
 
-PHP_VERSION="5.5.3"
+PHP_VERSION="5.5.6"
 ZEND_VM="GOTO"
 
 LIBEDIT_VERSION="0.3"
 ZLIB_VERSION="1.2.8"
-PTHREADS_VERSION="0.0.44"
-CURL_VERSION="curl-7_32_0"
+PTHREADS_VERSION="0.0.45"
+CURL_VERSION="curl-7_33_0"
 
 echo "[PocketMine] PHP installer and compiler for Linux & Mac"
 DIR="$(pwd)"
@@ -78,6 +78,9 @@ elif [ "$1" == "crosscompile" ]; then
 	fi
 else
 	echo "[INFO] Compiling for current machine"
+	if [ $(uname -m) == "x86_64" ]; then
+		CFLAGS="-mx32 $CFLAGS"
+	fi
 fi
 
 type $CC >> "$DIR/install.log" 2>&1 || { echo >&2 "[ERROR] Please install \"$CC\""; read -p "Press [Enter] to continue..."; exit 1; }

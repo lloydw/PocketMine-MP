@@ -20,76 +20,96 @@
 */
 
 class Explosion{
-	private $i = 16; //Rays
+	private $rays = 16; //Rays
 	public $level;
 	public $source;
 	public $size;
 	public $affectedBlocks = array();
+	public $stepLen = 0.3;
 	
-	public function __construct($level, Vector3 $center, $size){
-		$this->level = $level;
+	public function __construct(Position $center, $size){
+		$this->level = $center->level;
 		$this->source = $center;
 		$this->size = max($size, 0);
 	}
 	
 	public function explode(){
-		if($this->size < 0.1 or ServerAPI::request()->api->dhandle("entity.explosion", array(
-			"level" => $level,
+		$server = ServerAPI::request();
+		if($this->size < 0.1 or $server->api->dhandle("entity.explosion", array(
+			"level" => $this->level,
 			"source" => $this->source,
 			"size" => $this->size
 		))){
 			return false;
 		}
-		
-		for($i = 0; $i < $this->i; ++$i){
-			for($j = 0; $j < $this->i; ++$j){
-				for($k = 0; $k < $this->i; ++$k){
-					if($i === 0 or $i === ($this->i - 1) or $j === 0 or $j === ($this->i - 1) or $k === 0 or $k === ($this->i - 1)){
-						$d3 = $i / ($this->i - 1) * 2 - 1;
-						$d4 = $j / ($this->i - 1) * 2 - 1;
-						$d5 = $k / ($this->i - 1) * 2 - 1;
-						$d6 = sqrt($d3 * $d3 + $d4 * $d4 + $d5 * $d5);
-						$d3 /= $d6;
-						$d4 /= $d6;
-						$d5 /= $d6;
+
+		$mRays = $this->rays - 1;
+		for($i = 0; $i < $this->rays; ++$i){
+			for($j = 0; $j < $this->rays; ++$j){
+				for($k = 0; $k < $this->rays; ++$k){
+					if($i == 0 or $i == $mRays or $j == 0 or $j == $mRays or $k == 0 or $k == $mRays){
+						$vector = new Vector3($i / $mRays * 2 - 1, $j / $mRays * 2 - 1, $k / $mRays * 2 - 1); //($i / $mRays) * 2 - 1
+						$vector = $vector->normalize()->multiply($this->stepLen);
+						$pointer = clone $this->source;
 						
-						$f1 = $this->size * (0.7 + lcg_value() * 0.6);
-						$d0 = $this->source->x;
-						$d1 = $this->source->y;
-						$d2 = $this->source->z;
-						
-						for($f2 = 0.3; $f1 > 0; $f1 -= $f2 * 0.75){
-							$l = floor($d0);
-							$i1 = floor($d1);
-							$j1 = floor($d2);
-							$k1 = $this->level->getBlock(new Vector3($l, $i1, $j1))->getID();
-							if($k1 > AIR){
-								$f3 = 0.5; //Placeholder
-								$f1 -= ($f3 + 0.4) * $f2;
+						for($blastForce = $this->size * (mt_rand(700, 1300) / 1000); $blastForce > 0; $blastForce -= $this->stepLen * 0.75){
+							$vBlock = $pointer->floor();
+							$blockID = $this->level->level->getBlockID($vBlock->x, $vBlock->y, $vBlock->z);
+			
+							if($blockID > 0){
+								$block = BlockAPI::get($blockID, 0);
+								$block->x = $vBlock->x;
+								$block->y = $vBlock->y;
+								$block->z = $vBlock->z;
+								$blastForce -= ($block->getHardness() / 5 + 0.3) * $this->stepLen;
+								if($blastForce > 0){
+									$index = ($block->x << 15) + ($block->z << 7) +  $block->y;
+									if(!isset($this->affectedBlocks[$index])){
+										$this->affectedBlocks[$index] = $block;
+									}
+								}
 							}
-							
-							if($f1 > 0 and $i1 < 128 and $i1 >= 0){
-								$this->level->setBlock(new Vector3($l, $i1, $j1), AIR, 0, false);
-								$this->affectedBlocks[$l.$i1.$j1] = new Vector3($l, $i1, $j1);
-							}
-							
-							$d0 += $d3 * $f2;
-							$d1 += $d4 * $f2;
-							$d2 += $d5 * $f2;
+							$pointer = $pointer->add($vector);
 						}
 					}
 				}
 			}
 		}
-
-		foreach(ServerAPI::request()->api->player->getAll() as $player){
-			$player->dataPacket(MC_EXPLOSION, array(
-				"x" => $this->source->x,
-				"y" => $this->source->y,
-				"z" => $this->source->z,
-				"radius" => $this->size,
-				"records" => array(), //Blocks are already sent
-			));
+		
+		$send = array();
+		$source = $this->source->floor();
+		$radius = 2 * $this->size;
+		foreach($server->api->entity->getRadius($this->source, $radius) as $entity){
+			$impact = (1 - $this->source->distance($entity) / $radius) * 0.5; //placeholder, 0.7 should be exposure
+			$damage = (int) (($impact * $impact + $impact) * 8 * $this->size + 1);
+			$entity->harm($damage, "explosion");
 		}
+
+		foreach($this->affectedBlocks as $block){
+
+			if($block instanceof TNTBlock){
+				$data = array(
+					"x" => $block->x + 0.5,
+					"y" => $block->y + 0.5,
+					"z" => $block->z + 0.5,
+					"power" => 4,
+					"fuse" => mt_rand(10, 30), //0.5 to 1.5 seconds
+				);
+				$e = $server->api->entity->add($this->level, ENTITY_OBJECT, OBJECT_PRIMEDTNT, $data);
+				$server->api->entity->spawnToAll($e);
+			}elseif(mt_rand(0, 10000) < ((1/$this->size) * 10000)){
+				$server->api->entity->drop(new Position($block->x + 0.5, $block->y, $block->z + 0.5, $this->level), BlockAPI::getItem($block->getID(), $this->level->level->getBlockDamage($block->x, $block->y, $block->z)));
+			}
+			$this->level->level->setBlockID($block->x, $block->y, $block->z, 0);
+			$send[] = new Vector3($block->x - $source->x, $block->y - $source->y, $block->z - $source->z);
+		}
+		$server->api->player->broadcastPacket($server->api->player->getAll($this->level), MC_EXPLOSION, array(
+			"x" => $this->source->x,
+			"y" => $this->source->y,
+			"z" => $this->source->z,
+			"radius" => $this->size,
+			"records" => $send,
+		));
+
 	}
 }

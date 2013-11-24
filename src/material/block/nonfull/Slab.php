@@ -29,7 +29,6 @@ class SlabBlock extends TransparentBlock{
 			3 => "Cobblestone",
 			4 => "Brick",
 			5 => "Stone Brick",
-			//6 => "Nether Brick",
 			6 => "Quartz",
 		);
 		$this->name = (($this->meta & 0x08) === 0x08 ? "Upper ":"") . $names[$this->meta & 0x07] . " Slab";	
@@ -37,7 +36,8 @@ class SlabBlock extends TransparentBlock{
 			$this->isFullBlock = true;
 		}else{
 			$this->isFullBlock = false;
-		}
+		}		
+		$this->hardness = 30;
 	}
 	
 	public function place(Item $item, Player $player, Block $block, Block $target, $face, $fx, $fy, $fz){
@@ -46,12 +46,18 @@ class SlabBlock extends TransparentBlock{
 				if($target->getID() === SLAB and ($target->getMetadata() & 0x08) === 0x08 and ($target->getMetadata() & 0x07) === ($this->meta & 0x07)){
 					$this->level->setBlock($target, BlockAPI::get(DOUBLE_SLAB, $this->meta), true, false, true);
 					return true;
+				}elseif($block->getID() === SLAB and ($block->getMetadata() & 0x07) === ($this->meta & 0x07)){
+					$this->level->setBlock($block, BlockAPI::get(DOUBLE_SLAB, $this->meta), true, false, true);
+					return true;
 				}else{
 					$this->meta |= 0x08;
 				}
 			}elseif($face === 1){
 				if($target->getID() === SLAB and ($target->getMetadata() & 0x08) === 0 and ($target->getMetadata() & 0x07) === ($this->meta & 0x07)){
 					$this->level->setBlock($target, BlockAPI::get(DOUBLE_SLAB, $this->meta), true, false, true);
+					return true;
+				}elseif($block->getID() === SLAB and ($block->getMetadata() & 0x07) === ($this->meta & 0x07)){
+					$this->level->setBlock($block, BlockAPI::get(DOUBLE_SLAB, $this->meta), true, false, true);
 					return true;
 				}
 			}elseif(!$player->entity->inBlock($block)){

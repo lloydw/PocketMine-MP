@@ -28,7 +28,7 @@ if(strpos(" ".strtoupper(php_uname("s")), " WIN") !== false){
 	exec("time.exe /T", $hour);
 	$i = array_map("intval", explode(":", trim($hour[0])));
 	exec("date.exe /T", $date);
-	$j = array_map("intval", explode("/", trim($date[0])));
+	$j = array_map("intval", explode(substr($date[0], 2, 1), trim($date[0])));
 	$offset = round((mktime($i[0], $i[1], 0, $j[1], $j[0], $j[2]) - $time) / 60) * 60;
 }else{
 	exec("date +%s", $t);
@@ -60,8 +60,8 @@ ini_set("memory_limit", "128M"); //Default
 define("LOG", false);
 define("NO_THREADS", true);
 define("START_TIME", microtime(true));
-define("MAJOR_VERSION", "Alpha_1.3.9");
-define("CURRENT_MINECRAFT_VERSION", "0.7.5 alpha");
+define("MAJOR_VERSION", "Alpha_1.3.10");
+define("CURRENT_MINECRAFT_VERSION", "v0.7.6 alpha");
 define("CURRENT_API_VERSION", 10);
 define("CURRENT_PHP_VERSION", "5.5");
 define("TICK_SPEED", 1.0 / 20.0);

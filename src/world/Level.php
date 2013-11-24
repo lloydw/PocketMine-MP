@@ -20,12 +20,13 @@
 */
 
 class Level{
-	public $entities, $tiles, $blockUpdates, $nextSave, $players = array();
-	private $level, $time, $startCheck, $startTime, $server, $name, $usedChunks, $changedBlocks, $changedCount;
+	public $entities, $tiles, $blockUpdates, $nextSave, $players = array(), $level;
+	private $time, $startCheck, $startTime, $server, $name, $usedChunks, $changedBlocks, $changedCount;
 	
 	public function __construct(PMFLevel $level, Config $entities, Config $tiles, Config $blockUpdates, $name){
 		$this->server = ServerAPI::request();
 		$this->level = $level;
+		$this->level->level = $this;
 		$this->entities = $entities;
 		$this->tiles = $tiles;
 		$this->blockUpdates = $blockUpdates;
@@ -263,6 +264,11 @@ class Level{
 		$this->nextSave = microtime(true) + 45;
 	}
 	
+	public function getBlockRaw(Vector3 $pos){
+		$b = $this->level->getBlock($pos->x, $pos->y, $pos->z);
+		return BlockAPI::get($b[0], $b[1], new Position($pos->x, $pos->y, $pos->z, $this));
+	}
+	
 	public function getBlock(Vector3 $pos){
 		if(!isset($this->level) or ($pos instanceof Position) and $pos->level !== $this){
 			return false;
@@ -272,9 +278,6 @@ class Level{
 	}
 	
 	public function setBlockRaw(Vector3 $pos, Block $block, $direct = true, $send = true){
-		if(!isset($this->level)){
-			return false;
-		}
 		if(($ret = $this->level->setBlock($pos->x, $pos->y, $pos->z, $block->getID(), $block->getMetadata())) === true and $send !== false){
 			if($direct === true){
 				$this->server->api->player->broadcastPacket($this->players, MC_UPDATE_BLOCK, array(
@@ -415,11 +418,20 @@ class Level{
 		return new Position($this->level->getData("spawnX"), $this->level->getData("spawnY"), $this->level->getData("spawnZ"), $this);
 	}
 	
-	public function getSafeSpawn(){
-		if(($spawn = $this->getSpawn()) !== false){
+	public function getSafeSpawn($spawn = false){
+		if($spawn === false){
+			$spawn = $this->getSpawn();
+		}
+		if($spawn instanceof Vector3){
 			$x = (int) round($spawn->x);
 			$y = (int) round($spawn->y);
 			$z = (int) round($spawn->z);
+			for(; $y > 0; --$y){
+				$v = new Vector3($x, $y, $z);
+				if(!($this->getBlock($v->getSide(0)) instanceof AirBlock)){
+					break;
+				}
+			}
 			for(; $y < 128; ++$y){
 				$v = new Vector3($x, $y, $z);
 				if($this->getBlock($v->getSide(1)) instanceof AirBlock){

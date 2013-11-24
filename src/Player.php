@@ -113,7 +113,7 @@ class Player{
 	}
 	
 	public function setSpawn(Vector3 $pos){
-		if(!($pos instanceof Level)){
+		if(!($pos instanceof Position)){
 			$level = $this->level;
 		}else{
 			$level = $pos->level;
@@ -301,7 +301,7 @@ class Player{
 			}
 		}
 		$this->isSleeping = $pos;
-		$this->teleport(new Position($pos->x, $pos->y, $pos->z, $this->level));
+		$this->teleport(new Position($pos->x + 0.5, $pos->y + 1, $pos->z + 0.5, $this->level), false, false, false, false);
 		if($this->entity instanceof Entity){
 			$this->entity->updateMetadata();
 		}
@@ -351,7 +351,7 @@ class Player{
 					break;
 				}
 			}
-			if($add === 0){
+			if($add <= 0){
 				return false;
 			}
 			$count -= $add;
@@ -382,7 +382,7 @@ class Player{
 					break;
 				}
 			}
-			if($add === 0){
+			if($add <= 0){
 				return false;
 			}
 			$count -= $add;
@@ -407,7 +407,7 @@ class Player{
 					break;
 				}
 			}
-			if($remove === 0){
+			if($remove <= 0){
 				return false;
 			}
 			$count -= $remove;
@@ -746,7 +746,7 @@ class Player{
 	}
 	
 	public function teleport(Vector3 $pos, $yaw = false, $pitch = false, $terrain = true, $force = true){
-		if($this->entity instanceof Entity){
+		if($this->entity instanceof Entity and $this->level instanceof Level){
 			$this->entity->check = false;
 			if($yaw === false){
 				$yaw = $this->entity->yaw;
@@ -1167,7 +1167,7 @@ class Player{
 				}
 				$this->loggedIn = true;
 				
-				$u = $this->server->api->player->get($this->iusername);
+				$u = $this->server->api->player->get($this->iusername, false);
 				if($u !== false){
 					$u->close("logged in from another location");
 				}
@@ -1298,10 +1298,12 @@ class Player{
 						$this->dataPacket(MC_SET_TIME, array(
 							"time" => $this->level->getTime(),
 						));
-						$this->teleport(new Position($this->data->get("position")["x"], $this->data->get("position")["y"], $this->data->get("position")["z"], $this->level));
-						$this->server->schedule(10, array($this, "teleport"), new Position($this->data->get("position")["x"], $this->data->get("position")["y"], $this->data->get("position")["z"], $this->level));
-						$this->server->schedule(20, array($this, "teleport"), new Position($this->data->get("position")["x"], $this->data->get("position")["y"], $this->data->get("position")["z"], $this->level));
-						$this->server->schedule(30, array($this, "teleport"), new Position($this->data->get("position")["x"], $this->data->get("position")["y"], $this->data->get("position")["z"], $this->level));
+						$pos = new Position($this->data->get("position")["x"], $this->data->get("position")["y"], $this->data->get("position")["z"], $this->level);
+						$pos = $this->level->getSafeSpawn($pos);
+						$this->teleport($pos);
+						$this->server->schedule(10, array($this, "teleport"), $pos);
+						$this->server->schedule(20, array($this, "teleport"), $pos);
+						$this->server->schedule(30, array($this, "teleport"), $pos);
 						$this->server->handle("player.spawn", $this);
 						break;
 					case 2://Chunk loaded?
@@ -1452,6 +1454,53 @@ class Player{
 										"z" => $this->entity->z,
 									);
 									$e = $this->server->api->entity->add($this->level, ENTITY_OBJECT, OBJECT_ARROW, $d);
+									$e->yaw = $this->entity->yaw;
+									$e->pitch = $this->entity->pitch;
+									$rotation = ($this->entity->yaw - 90) % 360;
+									if($rotation < 0){
+										$rotation = (360 + $rotation);
+									}
+									$rotation = ($rotation + 180);
+									if($rotation >= 360){
+										$rotation = ($rotation - 360);
+									}
+									$X = 1;
+									$Z = 1;
+									$overturn = false;
+									if(0 <= $rotation and $rotation < 90){
+										
+									}
+									elseif(90 <= $rotation and $rotation < 180){
+										$rotation -= 90;
+										$X = (-1);
+										$overturn = true;
+									}
+									elseif(180 <= $rotation and $rotation < 270){
+										$rotation -= 180;
+										$X = (-1);
+										$Z = (-1);
+									}
+									elseif(270 <= $rotation and $rotation < 360){
+										$rotation -= 270;
+										$Z = (-1);
+										$overturn = true;
+									}
+									$rad = deg2rad($rotation);
+									$pitch = (-($this->entity->pitch));
+									$speed = 80;
+									$speedY = (sin(deg2rad($pitch)) * $speed);
+									$speedXZ = (cos(deg2rad($pitch)) * $speed);
+									if($overturn){
+										$speedX = (sin($rad) * $speedXZ * $X);
+										$speedZ = (cos($rad) * $speedXZ * $Z);
+									}
+									else{
+										$speedX = (cos($rad) * $speedXZ * $X);
+										$speedZ = (sin($rad) * $speedXZ * $Z);
+									}
+									$e->speedX = $speedX;
+									$e->speedZ = $speedZ;
+									$e->speedY = $speedY;
 									$this->server->api->entity->spawnToAll($e);
 								}
 							}
@@ -1618,6 +1667,7 @@ class Player{
 				}
 				$this->craftingItems = array();
 				$this->toCraft = array();
+				$this->teleport($this->spawnPosition);
 				if($this->entity instanceof Entity){
 					$this->entity->fire = 0;
 					$this->entity->air = 300;
@@ -1627,7 +1677,6 @@ class Player{
 					break;
 				}
 				$this->sendInventory();
-				$this->teleport($this->spawnPosition);
 				$this->blocked = false;
 				$this->server->handle("player.respawn", $this);
 				break;
@@ -1718,9 +1767,8 @@ class Player{
 				$this->toCraft = array();
 				if(isset($this->windows[$data["windowid"]])){
 					if(is_array($this->windows[$data["windowid"]])){
-						$all = $this->server->api->player->getAll($this->level);
 						foreach($this->windows[$data["windowid"]] as $ob){
-							$this->server->api->player->broadcastPacket($all, MC_TILE_EVENT, array(
+							$this->server->api->player->broadcastPacket($this->level->players, MC_TILE_EVENT, array(
 								"x" => $ob->x,
 								"y" => $ob->y,
 								"z" => $ob->z,

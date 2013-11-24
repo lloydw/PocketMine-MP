@@ -46,7 +46,7 @@ class Entity extends Position{
 	public $fallY;
 	public $fallStart;
 	private $tickCounter;
-	private $speedMeasure = array(0, 0, 0);
+	private $speedMeasure = array(0, 0, 0, 0, 0, 0, 0);
 	private $server;
 	private $isStatic;
 	public $level;
@@ -129,6 +129,10 @@ class Entity extends Position{
 				$this->size = 1;
 				if($this->type === OBJECT_PAINTING){
 					$this->isStatic = true;
+				}elseif($this->type === OBJECT_PRIMEDTNT){
+					$this->setHealth(10000000, "generic");
+					$this->server->schedule(5, array($this, "updateFuse"), array(), true);
+					$this->update();
 				}elseif($this->type === OBJECT_ARROW){
 					$this->server->schedule(1210, array($this, "update")); //Despawn
 					$this->update();
@@ -139,12 +143,33 @@ class Entity extends Position{
 		$this->updatePosition();
 	}
 	
+	public function updateFuse(){
+		if($this->closed === true){
+			return false;
+		}
+		if($this->type === OBJECT_PRIMEDTNT){
+			$this->updateMetadata();
+			if(((microtime(true) - $this->spawntime) * 20) >= $this->data["fuse"]){
+				$this->close();
+				$explosion = new Explosion($this, $this->data["power"]);
+				$explosion->explode();
+			}
+		}
+	}
+	
 	public function getDrops(){
 		if($this->class === ENTITY_PLAYER and ($this->player->gamemode & 0x01) === 0){
 			$inv = array();
 			for($i = 0; $i < PLAYER_SURVIVAL_SLOTS; ++$i){
 				$slot = $this->player->getSlot($i);
 				$this->player->setSlot($i, BlockAPI::getItem(AIR, 0, 0));
+				if($slot->getID() !== AIR and $slot->count > 0){
+					$inv[] = array($slot->getID(), $slot->getMetadata(), $slot->count);
+				}
+			}
+			for($re = 0; $re < 3; $re++){
+				$slot = $this->player->getArmor($re);
+				$this->player->setArmor($re, BlockAPI::getItem(AIR, 0, 0));
 				if($slot->getID() !== AIR and $slot->count > 0){
 					$inv[] = array($slot->getID(), $slot->getMetadata(), $slot->count);
 				}
@@ -383,7 +408,8 @@ class Entity extends Position{
 		
 		if($this->isStatic === false){
 			$startX = floor($this->x - 0.5 - $this->size - 1);
-			$y = (int) round($this->y - 1);
+			//prefix for flying when player on fence
+			$y = (int) floor($this->y - 1);
 			$startZ = floor($this->z - 0.5 - $this->size - 1);
 			$endX = ceil($this->x - 0.5 + $this->size + 1);
 			$endZ = ceil($this->z - 0.5 + $this->size + 1);
@@ -409,7 +435,7 @@ class Entity extends Position{
 			}
 			if($this->class !== ENTITY_PLAYER){
 				$update = false;
-				if($this->class !== ENTITY_OBJECT or $support === false){
+				if(($this->class !== ENTITY_OBJECT and $this->type !== OBJECT_PRIMEDTNT) or $support === false){
 					$drag = 0.4 * $tdiff;
 					if($this->speedX != 0){
 						$this->speedX -= $this->speedX * $drag;
@@ -463,7 +489,7 @@ class Entity extends Position{
 					$this->speedY = 0;
 					$this->speedZ = 0;
 					$this->server->api->handle("entity.move", $this);
-					if($this->class === ENTITY_OBJECT or $this->speedY <= 0.1){
+					if(($this->class === ENTITY_OBJECT and $this->type !== OBJECT_PRIMEDTNT) or $this->speedY <= 0.1){
 						$update = false;						
 						$this->server->api->handle("entity.motion", $this);
 					}
@@ -501,7 +527,7 @@ class Entity extends Position{
 					
 				}
 				$this->calculateVelocity();
-				if($this->speed <= 7 or ($this->speed <= 15 and ($this->player->gamemode & 0x01) === 0x01)){
+				if($this->speed <= 9 or ($this->speed <= 20 and ($this->player->gamemode & 0x01) === 0x01)){
 					$this->player->lastCorrect = new Vector3($this->last[0], $this->last[1], $this->last[2]);
 				}
 			}
@@ -587,6 +613,8 @@ class Entity extends Position{
 				$this->data["Color"] = mt_rand(0,15);
 			}
 			$d[16]["value"] = (($this->data["Sheared"] == 1 ? 1:0) << 4) | ($this->data["Color"] & 0x0F);
+		}elseif($this->type === OBJECT_PRIMEDTNT){
+			$d[16]["value"] = (int) max(0, $this->data["fuse"] - (microtime(true) - $this->spawntime) * 20);
 		}elseif($this->class === ENTITY_PLAYER){
 			if($this->player->isSleeping !== false){
 				$d[16]["value"] = 2;
@@ -680,6 +708,15 @@ class Entity extends Position{
 						"z" => (int) $this->z,
 						"direction" => $this->getDirection(),
 						"title" => $this->data["Motive"],
+					));
+				}elseif($this->type === OBJECT_PRIMEDTNT){
+					$player->dataPacket(MC_ADD_ENTITY, array(
+						"eid" => $this->eid,
+						"type" => $this->type,
+						"x" => $this->x,
+						"y" => $this->y,
+						"z" => $this->z,
+						"did" => 0,
 					));
 				}elseif($this->type === OBJECT_ARROW){
 					$player->dataPacket(MC_ADD_ENTITY, array(
@@ -819,7 +856,7 @@ class Entity extends Position{
 	}
 
 	public function resetSpeed(){
-		$this->speedMeasure = array(0, 0, 0);	
+		$this->speedMeasure = array(0, 0, 0, 0, 0, 0, 0);	
 	}
 
 	public function getSpeed(){
@@ -837,7 +874,7 @@ class Entity extends Position{
 		$speedX = ($this->last[0] - $this->x) / $diffTime;
 		$speedY = ($this->last[1] - $this->y) / $diffTime;
 		$speedZ = ($this->last[2] - $this->z) / $diffTime;
-		if($this->speedX != $speedX or $this->speedY = $speedY or $this->speedZ = $speedZ){
+		if($this->speedX != $speedX or $this->speedY != $speedY or $this->speedZ != $speedZ){
 			$this->speedX = $speedX;
 			$this->speedY = $speedY;
 			$this->speedZ = $speedZ;
