@@ -167,7 +167,7 @@ class Entity extends Position{
 					$inv[] = array($slot->getID(), $slot->getMetadata(), $slot->count);
 				}
 			}
-			for($re = 0; $re < 3; $re++){
+			for($re = 0; $re < 4; $re++){
 				$slot = $this->player->getArmor($re);
 				$this->player->setArmor($re, BlockAPI::getItem(AIR, 0, 0));
 				if($slot->getID() !== AIR and $slot->count > 0){
@@ -239,7 +239,7 @@ class Entity extends Position{
 		$time = microtime(true);
 		if($this->class === ENTITY_PLAYER and ($this->player instanceof Player) and $this->player->spawned === true and $this->player->blocked !== true){
 			foreach($this->server->api->entity->getRadius($this, 1.5, ENTITY_ITEM) as $item){
-				if(($time - $item->spawntime) >= 0.6){
+				if($item->spawntime !== -1 and ($time - $item->spawntime) >= 0.6){
 					if((($this->player->gamemode & 0x01) === 1 or $this->player->hasSpace($item->type, $item->meta, $item->stack) === true) and $this->server->api->dhandle("player.pickup", array(
 						"eid" => $this->player->eid,
 						"player" => $this->player,
@@ -248,7 +248,8 @@ class Entity extends Position{
 						"meta" => $item->meta,
 						"target" => $item->eid
 					)) !== false){
-						$item->close();
+						$item->spawntime = -1;
+						$this->server->schedule(15, array($item, "close"));
 					}
 				}
 			}
@@ -314,6 +315,9 @@ class Entity extends Position{
 				$this->updateMetadata();
 			}else{
 				$hasUpdate = true;
+			}
+			if(($this->player instanceof Player) and ($this->player->gamemode & 0x01) === CREATIVE){ //Remove fire effects in next tick
+				$this->fire = 1;
 			}
 		}
 		
@@ -424,7 +428,7 @@ class Entity extends Position{
 							$support = true;
 							$isFlying = false;
 							break;
-						}elseif(($b instanceof LiquidBlock) or $b->getID() === COBWEB or $b->getID() === LADDER or $b->getID() === FENCE){
+						}elseif(($b instanceof LiquidBlock) or $b->getID() === COBWEB or $b->getID() === LADDER or $b->getID() === FENCE or $b->getID() === STONE_WALL){
 							$isFlying = false;
 						}
 					}
@@ -561,15 +565,25 @@ class Entity extends Position{
 					$players = $this->server->api->player->getAll($this->level);
 					if($this->player instanceof Player){
 						unset($players[$this->player->CID]);
+						$this->server->api->player->broadcastPacket($players, MC_MOVE_PLAYER, array(
+							"eid" => $this->eid,
+							"x" => $this->x,
+							"y" => $this->y,
+							"z" => $this->z,
+							"yaw" => $this->yaw,
+							"pitch" => $this->pitch,
+							"bodyYaw" => $this->yaw,
+						));
+					}else{
+						$this->server->api->player->broadcastPacket($players, MC_MOVE_ENTITY_POSROT, array(
+							"eid" => $this->eid,
+							"x" => $this->x,
+							"y" => $this->y,
+							"z" => $this->z,
+							"yaw" => $this->yaw,
+							"pitch" => $this->pitch,
+						));
 					}
-					$this->server->api->player->broadcastPacket($players, MC_MOVE_ENTITY_POSROT, array(
-						"eid" => $this->eid,
-						"x" => $this->x,
-						"y" => $this->y,
-						"z" => $this->z,
-						"yaw" => $this->yaw,
-						"pitch" => $this->pitch,
-					));
 				}
 			}else{
 				$this->updatePosition($this->x, $this->y, $this->z, $this->yaw, $this->pitch);
@@ -802,7 +816,7 @@ class Entity extends Position{
 	}
 
 	public function setPosition(Vector3 $pos, $yaw = false, $pitch = false){
-		if($pos instanceof Position){
+		if($pos instanceof Position and $this->level !== $pos->level){
 			$this->level = $pos->level;
 			$this->server->preparedSQL->entity->setLevel->reset();
 			$this->server->preparedSQL->entity->setLevel->clear();
@@ -953,7 +967,7 @@ class Entity extends Position{
 		}elseif($health === $this->health){
 			return false;
 		}
-		if($this->server->api->dhandle("entity.health.change", array("entity" => $this, "eid" => $this->eid, "health" => $health, "cause" => $cause)) !== false){
+		if($this->server->api->dhandle("entity.health.change", array("entity" => $this, "eid" => $this->eid, "health" => $health, "cause" => $cause)) !== false or $force === true){
 			$this->health = min(127, max(-127, $health));
 			$this->server->query("UPDATE entities SET health = ".$this->health." WHERE EID = ".$this->eid.";");
 			if($harm === true){

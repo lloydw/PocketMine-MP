@@ -60,13 +60,12 @@ class MinecraftInterface{
 			$timeout = 0;
 
 		// Load as many packets as possible
-		if ($this->socket->isReadReady($timeout))
-		{
+		if ($this->socket->isReadReady($timeout)){
 			$buf = "";
 			$source = false;
 			$port = 1;
 			$len = $this->socket->read($buf, $source, $port);
-			if($len !== false){
+			if($len !== false && $len > 0){
 				$this->bandwidth[0] += $len;
 				$this->parsePacket($buf, $source, $port);	
 			}

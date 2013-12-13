@@ -60,9 +60,9 @@ ini_set("memory_limit", "128M"); //Default
 define("LOG", false);
 define("NO_THREADS", true);
 define("START_TIME", microtime(true));
-define("MAJOR_VERSION", "Alpha_1.3.10");
-define("CURRENT_MINECRAFT_VERSION", "v0.7.6 alpha");
-define("CURRENT_API_VERSION", 10);
+define("MAJOR_VERSION", "Alpha_1.3.11dev");
+define("CURRENT_MINECRAFT_VERSION", "v0.8.0 alpha");
+define("CURRENT_API_VERSION", 11);
 define("CURRENT_PHP_VERSION", "5.5");
 define("TICK_SPEED", 1.0 / 20.0);
 $gitsha1 = false;

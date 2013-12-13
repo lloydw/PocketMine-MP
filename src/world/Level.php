@@ -347,19 +347,19 @@ class Level{
 		return $ret;
 	}
 	
-	public function getMiniChunk($X, $Y, $Z){
+	public function getMiniChunk($X, $Z, $Y){
 		if(!isset($this->level)){
 			return false;
 		}
-		return $this->level->getMiniChunk($X, $Z);
+		return $this->level->getMiniChunk($X, $Z, $Y);
 	}
 	
-	public function setMiniChunk($X, $Y, $Z, $data){
+	public function setMiniChunk($X, $Z, $Y, $data){
 		if(!isset($this->level)){
 			return false;
 		}
 		$this->changedCount[$X.":".$Y.":".$Z] = 4096;
-		return $this->level->setMiniChunk($X, $Y, $Z, $data);
+		return $this->level->setMiniChunk($X, $Z, $Y, $data);
 	}
 	
 	public function loadChunk($X, $Z){
