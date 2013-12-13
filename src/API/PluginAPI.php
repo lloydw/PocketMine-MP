@@ -41,7 +41,7 @@ class PluginAPI extends stdClass{
 	}
 
 	public function load($file){
-		if(is_link($file) or is_dir($file) or !file_exists($file)){
+		if(is_dir($file) or !file_exists($file)){
 			console("[ERROR] ".basename($file)." is not a file");
 			return false;
 		}
